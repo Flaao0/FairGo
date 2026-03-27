@@ -51,6 +51,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
@@ -69,8 +71,12 @@ dependencies {
 
     // Dagger Hilt
     implementation("com.google.dagger:hilt-android:2.52")
+    implementation(libs.androidx.compose.foundation)
     kapt("com.google.dagger:hilt-compiler:2.52")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
+    // Yandex MapKit (full)
+    implementation("com.yandex.android:maps.mobile:4.5.1-full")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
