@@ -6,6 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.fairgo.presentation.screens.AddCardScreen
 import com.example.fairgo.presentation.screens.auth.AuthViewModel
 import com.example.fairgo.presentation.screens.auth.SignInScreen
 import com.example.fairgo.presentation.screens.auth.SignUpScreen
@@ -51,16 +52,28 @@ fun FairGoNavGraph(
                         launchSingleTop = true
                     }
                 },
+                onSignUpSuccess = {
+                    navController.navigate(Screen.Map.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
             )
         }
 
         composable(Screen.Map.route) {
-            val viewModel: MapViewModel = hiltViewModel()
             MapScreen(
-                viewModel = viewModel,
-                onNavigateToAddressSelection = {
-                    navController.navigate(Screen.AddressSelection.route)
-                },
+                viewModel = hiltViewModel(),
+                onNavigateToAddressSelection = { /* ... твой код ... */ },
+                onNavigateToPayment = {
+                    navController.navigate(Screen.Payment.route)
+                }
+            )
+        }
+
+        composable(Screen.Payment.route) { // Убедись, что создал объект Payment в своем классе Screen
+            AddCardScreen(
+                onBackClick = { navController.popBackStack() }
             )
         }
 

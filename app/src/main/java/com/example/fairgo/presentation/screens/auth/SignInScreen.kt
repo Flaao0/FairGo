@@ -1,5 +1,6 @@
 package com.example.fairgo.presentation.screens.auth
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -39,6 +44,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.example.fairgo.R
 import com.example.fairgo.presentation.theme.FairGoDivider
 import com.example.fairgo.presentation.theme.FairGoGreen
 import com.example.fairgo.presentation.theme.FairGoTextSecondary
@@ -121,13 +127,21 @@ fun SignInScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Divider(modifier = Modifier.weight(1f), color = FairGoDivider)
+            HorizontalDivider(
+                modifier = Modifier.weight(1f),
+                thickness = DividerDefaults.Thickness,
+                color = FairGoDivider
+            )
             Text(
                 text = "ИЛИ ВОЙДИТЕ С ПОМОЩЬЮ",
                 style = MaterialTheme.typography.labelLarge,
                 color = FairGoTextSecondary,
             )
-            Divider(modifier = Modifier.weight(1f), color = FairGoDivider)
+            HorizontalDivider(
+                modifier = Modifier.weight(1f),
+                thickness = DividerDefaults.Thickness,
+                color = FairGoDivider
+            )
         }
 
         Spacer(Modifier.height(18.dp))
@@ -136,9 +150,9 @@ fun SignInScreen(
             horizontalArrangement = Arrangement.spacedBy(22.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SocialPlaceholder()
-            SocialPlaceholder()
-            SocialPlaceholder()
+            SocialPlaceholderFacebook()
+            SocialPlaceholderGoogle()
+            SocialPlaceholderTwitter()
         }
 
         Spacer(Modifier.weight(1f))
@@ -170,11 +184,43 @@ fun SignInScreen(
 }
 
 @Composable
-private fun SocialPlaceholder() {
+private fun SocialPlaceholderFacebook() {
     Box(
         modifier = Modifier
             .size(54.dp)
-            .background(Color(0xFFE5E5E5), CircleShape),
-    )
+    ){
+        Icon(
+            painter = painterResource(id = R.drawable.ic_facebook),
+            contentDescription = "Login with Twitter",
+            tint = Color.Unspecified
+        )
+    }
 }
 
+@Composable
+private fun SocialPlaceholderGoogle() {
+    Box(
+        modifier = Modifier
+            .size(54.dp)
+    ){
+        Icon(
+            painter = painterResource(id = R.drawable.ic_gmail),
+            contentDescription = "Login with Twitter",
+            tint = Color.Unspecified
+        )
+    }
+}
+
+@Composable
+private fun SocialPlaceholderTwitter() {
+    Box(
+        modifier = Modifier
+            .size(54.dp)
+    ){
+        Icon(
+            painter = painterResource(id = R.drawable.ic_twitter),
+            contentDescription = "Login with Twitter",
+            tint = Color.Unspecified
+        )
+    }
+}

@@ -40,6 +40,7 @@ import com.example.fairgo.presentation.theme.FairGoWhite
 fun SignUpScreen(
     viewModel: AuthViewModel,
     onNavigateToSignIn: () -> Unit,
+    onSignUpSuccess: () -> Unit
 ) {
     val name by viewModel.name.collectAsState()
     val email by viewModel.email.collectAsState()
@@ -111,7 +112,7 @@ fun SignUpScreen(
 
         PrimaryGreenButton(
             text = "Зарегистрироваться",
-            onClick = { /* TODO: register */ },
+            onClick = { onSignUpSuccess() },
         )
 
         Spacer(Modifier.weight(1f))

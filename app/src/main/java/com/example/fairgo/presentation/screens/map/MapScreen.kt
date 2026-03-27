@@ -12,9 +12,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -22,27 +22,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.yandex.mapkit.Animation
 import com.yandex.mapkit.MapKitFactory
 import com.yandex.mapkit.geometry.Point
 import com.yandex.mapkit.layers.ObjectEvent
+import com.yandex.mapkit.logo.HorizontalAlignment
+import com.yandex.mapkit.logo.Padding
+import com.yandex.mapkit.logo.VerticalAlignment
 import com.yandex.mapkit.map.CameraPosition
 import com.yandex.mapkit.mapview.MapView
 import com.yandex.mapkit.user_location.UserLocationObjectListener
 import com.yandex.mapkit.user_location.UserLocationView
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 
 @Composable
 fun MapScreen(
     viewModel: MapViewModel,
     onNavigateToAddressSelection: () -> Unit,
+    onNavigateToPayment: () -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -64,6 +68,10 @@ fun MapScreen(
     var lastUserPoint by remember { mutableStateOf<Point?>(null) }
 
     val mapView = remember {
+        val density = context.resources.displayMetrics.density
+        val verticalPaddingPx = (130 * density).toInt()
+        val horizontalPaddingPx = (16 * density).toInt()
+
         MapView(context).apply {
             layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
             mapWindow.map.apply {
@@ -71,6 +79,13 @@ fun MapScreen(
                 isScrollGesturesEnabled = true
                 isTiltGesturesEnabled = true
                 isRotateGesturesEnabled = true
+
+                logo.setAlignment(
+                    com.yandex.mapkit.logo.Alignment(
+                        HorizontalAlignment.RIGHT, VerticalAlignment.BOTTOM
+                    )
+                )
+                logo.setPadding(Padding(horizontalPaddingPx, verticalPaddingPx))
             }
         }
     }
@@ -85,9 +100,8 @@ fun MapScreen(
         userLocationLayer.isVisible = hasLocationPermission
         val listener = object : UserLocationObjectListener {
 
-            // Вынесли центрирование в отдельную функцию
             private fun tryCenterMap(point: Point) {
-                if (point.latitude == 0.0 && point.longitude == 0.0) return // Ждем нормальные координаты
+                if (point.latitude == 0.0 && point.longitude == 0.0) return
 
                 lastUserPoint = point
                 if (!hasCenteredToUserLocation) {
@@ -110,7 +124,6 @@ fun MapScreen(
                 userLocationView: UserLocationView,
                 objectEvent: ObjectEvent,
             ) {
-                // Теперь карта проверяет координаты постоянно, пока не прилетит к тебе
                 tryCenterMap(userLocationView.pin.geometry)
             }
         }
@@ -145,16 +158,13 @@ fun MapScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
-        // Жесты меню работают ТОЛЬКО когда оно открыто. Закрытой карте они больше не мешают!
         gesturesEnabled = drawerState.isOpen,
         drawerContent = {
-            ModalDrawerSheet {
-                Text(
-                    text = "Меню (заглушка)",
-                    modifier = Modifier.padding(24.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-            }
+            DrawerMenuContent(
+                onClose = { scope.launch { drawerState.close() } },
+                onLogout = { /* TODO */ },
+                onNavigateToPayment = onNavigateToPayment
+            )
         },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -177,7 +187,6 @@ fun MapScreen(
                 onClick = {
                     if (hasLocationPermission) {
                         userLocationLayer.isVisible = true
-                        // Надежный способ: берем координаты напрямую из слоя Яндекса
                         val target = userLocationLayer.cameraPosition()?.target ?: lastUserPoint
 
                         if (target != null && target.latitude != 0.0) {
@@ -198,8 +207,7 @@ fun MapScreen(
             Card(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .navigationBarsPadding(),
+                    .fillMaxWidth(),
                 shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
@@ -207,7 +215,8 @@ fun MapScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .navigationBarsPadding(),
                 ) {
                     Box(
                         modifier = Modifier
@@ -260,9 +269,7 @@ fun MapScreen(
                             recentAddresses.take(2).forEach { address ->
                                 AddressListItem(address)
                                 HorizontalDivider(
-                                    Modifier,
-                                    DividerDefaults.Thickness,
-                                    color = Color(0xFFDCE2E8)
+                                    Modifier, DividerDefaults.Thickness, color = Color(0xFFDCE2E8)
                                 )
                             }
                         }
@@ -270,6 +277,83 @@ fun MapScreen(
                 }
             }
         }
+    }
+}
+
+// -----------------------------------------------------------------------------------------
+// ФУНКЦИИ КОМПОНЕНТОВ (Вынесены за пределы MapScreen)
+// -----------------------------------------------------------------------------------------
+
+@Composable
+fun DrawerMenuContent(
+    onClose: () -> Unit,
+    onLogout: () -> Unit,
+    onNavigateToPayment: () -> Unit,
+) {
+    ModalDrawerSheet(
+        drawerContainerColor = Color.White,
+        modifier = Modifier.width(320.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF7DB546))
+                .systemBarsPadding()
+                .padding(start = 24.dp, top = 24.dp, bottom = 32.dp, end = 24.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(72.dp), shape = CircleShape, color = Color.White
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Аватар",
+                    tint = Color.LightGray,
+                    modifier = Modifier.fillMaxSize().padding(12.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Егор",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = Color.White
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Udalovea@yandex.ru",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        DrawerMenuItem(text = "ИСТОРИЯ ПОЕЗДОК", onClick = { onClose() })
+        DrawerMenuItem(
+            text = "СПОСОБ ОПЛАТЫ", onClick = {
+                onClose()
+                onNavigateToPayment()
+            }
+        )
+        DrawerMenuItem(text = "ПРОМОКОД", badge = "1", onClick = { onClose() })
+        DrawerMenuItem(text = "ПОДДЕРЖКА", onClick = { onClose() })
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Text(
+            text = "Выйти",
+            color = Color(0xFF7DB546),
+            textDecoration = TextDecoration.Underline,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier
+                .padding(start = 24.dp, bottom = 48.dp)
+                .navigationBarsPadding()
+                .clickable {
+                    onClose()
+                    onLogout()
+                }
+        )
     }
 }
 
@@ -322,6 +406,45 @@ private fun AddressListItem(address: AddressItem) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF97A8B7)
             )
+        }
+    }
+}
+
+@Composable
+private fun DrawerMenuItem(
+    text: String,
+    badge: String? = null,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+            color = Color(0xFF3D4754)
+        )
+
+        if (badge != null) {
+            Spacer(modifier = Modifier.weight(1f))
+            Surface(
+                shape = CircleShape,
+                color = Color.White,
+                shadowElevation = 4.dp,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = badge,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF3D4754)
+                    )
+                }
+            }
         }
     }
 }
