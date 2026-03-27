@@ -1,59 +1,42 @@
 package com.example.fairgo.presentation.screens.map
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.*
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.yandex.mapkit.Animation
 import com.yandex.mapkit.MapKitFactory
+import com.yandex.mapkit.geometry.Point
+import com.yandex.mapkit.layers.ObjectEvent
+import com.yandex.mapkit.map.CameraPosition
 import com.yandex.mapkit.mapview.MapView
+import com.yandex.mapkit.user_location.UserLocationObjectListener
+import com.yandex.mapkit.user_location.UserLocationView
 import kotlinx.coroutines.launch
 
 @Composable
@@ -62,14 +45,78 @@ fun MapScreen(
     onNavigateToAddressSelection: () -> Unit,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val recentAddresses by viewModel.recentAddresses.collectAsState()
 
+    val hasLocationPermission = remember(context) {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    var hasCenteredToUserLocation by rememberSaveable { mutableStateOf(false) }
+    var lastUserPoint by remember { mutableStateOf<Point?>(null) }
+
     val mapView = remember {
         MapView(context).apply {
             layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+            mapWindow.map.apply {
+                isZoomGesturesEnabled = true
+                isScrollGesturesEnabled = true
+                isTiltGesturesEnabled = true
+                isRotateGesturesEnabled = true
+            }
+        }
+    }
+
+    val userLocationLayer = remember {
+        MapKitFactory.getInstance().createUserLocationLayer(mapView.mapWindow).apply {
+            isVisible = hasLocationPermission
+        }
+    }
+
+    DisposableEffect(userLocationLayer) {
+        userLocationLayer.isVisible = hasLocationPermission
+        val listener = object : UserLocationObjectListener {
+
+            // Вынесли центрирование в отдельную функцию
+            private fun tryCenterMap(point: Point) {
+                if (point.latitude == 0.0 && point.longitude == 0.0) return // Ждем нормальные координаты
+
+                lastUserPoint = point
+                if (!hasCenteredToUserLocation) {
+                    mapView.mapWindow.map.move(
+                        CameraPosition(point, 16.0f, 0f, 0f),
+                        Animation(Animation.Type.SMOOTH, 1.5f),
+                        null,
+                    )
+                    hasCenteredToUserLocation = true
+                }
+            }
+
+            override fun onObjectAdded(userLocationView: UserLocationView) {
+                tryCenterMap(userLocationView.pin.geometry)
+            }
+
+            override fun onObjectRemoved(userLocationView: UserLocationView) = Unit
+
+            override fun onObjectUpdated(
+                userLocationView: UserLocationView,
+                objectEvent: ObjectEvent,
+            ) {
+                // Теперь карта проверяет координаты постоянно, пока не прилетит к тебе
+                tryCenterMap(userLocationView.pin.geometry)
+            }
+        }
+        userLocationLayer.setObjectListener(listener)
+        onDispose {
+            userLocationLayer.setObjectListener(null)
         }
     }
 
@@ -98,6 +145,8 @@ fun MapScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // Жесты меню работают ТОЛЬКО когда оно открыто. Закрытой карте они больше не мешают!
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             ModalDrawerSheet {
                 Text(
@@ -114,32 +163,36 @@ fun MapScreen(
                 factory = { mapView },
             )
 
-            Row(
+            FloatingCircleButton(
+                icon = { Icon(Icons.Default.Menu, contentDescription = "Меню") },
+                onClick = { scope.launch { drawerState.open() } },
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .align(Alignment.TopStart)
                     .systemBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FloatingCircleButton(
-                    icon = {
-                        Icon(Icons.Default.Menu, contentDescription = "Меню")
-                    },
-                    onClick = { scope.launch { drawerState.open() } },
-                )
-                Spacer(Modifier.size(48.dp))
-            }
+                    .padding(start = 16.dp, top = 16.dp)
+            )
 
             FloatingCircleButton(
-                icon = {
-                    Icon(Icons.Default.GpsFixed, contentDescription = "Моя локация")
+                icon = { Icon(Icons.Default.GpsFixed, contentDescription = "Моя локация") },
+                onClick = {
+                    if (hasLocationPermission) {
+                        userLocationLayer.isVisible = true
+                        // Надежный способ: берем координаты напрямую из слоя Яндекса
+                        val target = userLocationLayer.cameraPosition()?.target ?: lastUserPoint
+
+                        if (target != null && target.latitude != 0.0) {
+                            mapView.mapWindow.map.move(
+                                CameraPosition(target, 16f, 0f, 0f),
+                                Animation(Animation.Type.SMOOTH, 1.0f),
+                                null,
+                            )
+                        }
+                    }
                 },
-                onClick = { /* TODO: center to user location */ },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .navigationBarsPadding()
-                    .padding(end = 16.dp, bottom = 260.dp),
+                    .padding(end = 16.dp, bottom = 140.dp),
             )
 
             Card(
@@ -198,14 +251,20 @@ fun MapScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(140.dp),
-                    ) {
-                        items(recentAddresses.take(2)) { address ->
-                            AddressListItem(address)
-                            Divider(color = Color(0xFFDCE2E8))
+                    if (recentAddresses.isNotEmpty()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .wrapContentHeight(),
+                        ) {
+                            recentAddresses.take(2).forEach { address ->
+                                AddressListItem(address)
+                                HorizontalDivider(
+                                    Modifier,
+                                    DividerDefaults.Thickness,
+                                    color = Color(0xFFDCE2E8)
+                                )
+                            }
                         }
                     }
                 }
@@ -226,8 +285,9 @@ private fun FloatingCircleButton(
         color = Color.White,
         shadowElevation = 6.dp,
         tonalElevation = 2.dp,
+        onClick = onClick
     ) {
-        IconButton(onClick = onClick) {
+        Box(contentAlignment = Alignment.Center) {
             icon()
         }
     }
@@ -252,9 +312,16 @@ private fun AddressListItem(address: AddressItem) {
             Text(text = "•", color = Color.White)
         }
         Column {
-            Text(text = address.street, style = MaterialTheme.typography.bodyLarge, color = Color(0xFF3D4754))
-            Text(text = address.city, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF97A8B7))
+            Text(
+                text = address.street,
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color(0xFF3D4754)
+            )
+            Text(
+                text = address.city,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF97A8B7)
+            )
         }
     }
 }
-
