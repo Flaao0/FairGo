@@ -66,8 +66,9 @@ fun MapScreen(
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    var hasCenteredToUserLocation by rememberSaveable { mutableStateOf(false) }
     var lastUserPoint by remember { mutableStateOf<Point?>(null) }
+
+    var hasCenteredToUserLocation by remember { mutableStateOf(false) }
 
     val mapView = remember {
         val density = context.resources.displayMetrics.density
@@ -94,22 +95,21 @@ fun MapScreen(
 
     val userLocationLayer = remember {
         MapKitFactory.getInstance().createUserLocationLayer(mapView.mapWindow).apply {
-            isVisible = hasLocationPermission
+            isHeadingEnabled = true
         }
     }
 
-    DisposableEffect(userLocationLayer) {
+    DisposableEffect(userLocationLayer, hasLocationPermission) {
         userLocationLayer.isVisible = hasLocationPermission
         val listener = object : UserLocationObjectListener {
 
             private fun tryCenterMap(point: Point) {
                 if (point.latitude == 0.0 && point.longitude == 0.0) return
 
-                lastUserPoint = point
                 if (!hasCenteredToUserLocation) {
                     mapView.mapWindow.map.move(
-                        CameraPosition(point, 16.0f, 0f, 0f),
-                        Animation(Animation.Type.SMOOTH, 1.5f),
+                        CameraPosition(point, 17.0f, 0f, 0f),
+                        Animation(Animation.Type.SMOOTH, 0.5f),
                         null,
                     )
                     hasCenteredToUserLocation = true
@@ -122,16 +122,32 @@ fun MapScreen(
 
             override fun onObjectRemoved(userLocationView: UserLocationView) = Unit
 
-            override fun onObjectUpdated(
-                userLocationView: UserLocationView,
-                objectEvent: ObjectEvent,
-            ) {
+            override fun onObjectUpdated(userLocationView: UserLocationView, objectEvent: ObjectEvent) {
                 tryCenterMap(userLocationView.pin.geometry)
             }
         }
         userLocationLayer.setObjectListener(listener)
         onDispose {
             userLocationLayer.setObjectListener(null)
+        }
+    }
+
+    LaunchedEffect(userLocationLayer, hasLocationPermission) {
+        if (hasLocationPermission) {
+            userLocationLayer.isVisible = true
+            while (!hasCenteredToUserLocation) {
+                val camera = userLocationLayer.cameraPosition()
+                if (camera != null && camera.target.latitude != 0.0 && camera.target.longitude != 0.0) {
+                    mapView.mapWindow.map.move(
+                        CameraPosition(camera.target, 17f, 0f, 0f),
+                        Animation(Animation.Type.SMOOTH, 0.5f),
+                        null,
+                    )
+                    hasCenteredToUserLocation = true
+                } else {
+                    kotlinx.coroutines.delay(500)
+                }
+            }
         }
     }
 
@@ -189,13 +205,11 @@ fun MapScreen(
                 icon = { Icon(Icons.Default.GpsFixed, contentDescription = "Моя локация") },
                 onClick = {
                     if (hasLocationPermission) {
-                        userLocationLayer.isVisible = true
-                        val target = userLocationLayer.cameraPosition()?.target ?: lastUserPoint
-
-                        if (target != null && target.latitude != 0.0) {
+                        val camera = userLocationLayer.cameraPosition()
+                        if (camera != null) {
                             mapView.mapWindow.map.move(
-                                CameraPosition(target, 16f, 0f, 0f),
-                                Animation(Animation.Type.SMOOTH, 1.0f),
+                                CameraPosition(camera.target, 17f, 0f, 0f),
+                                Animation(Animation.Type.SMOOTH, 0.5f),
                                 null,
                             )
                         }
@@ -288,7 +302,7 @@ fun DrawerMenuContent(
     onClose: () -> Unit,
     onLogout: () -> Unit,
     onNavigateToPayment: () -> Unit,
-    onNavigateToPromoCode: () -> Unit
+    onNavigateToPromoCode: () -> Unit,
 ) {
     ModalDrawerSheet(
         drawerContainerColor = Color.White,
@@ -308,7 +322,9 @@ fun DrawerMenuContent(
                     imageVector = Icons.Default.Person,
                     contentDescription = "Аватар",
                     tint = Color.LightGray,
-                    modifier = Modifier.fillMaxSize().padding(12.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp)
                 )
             }
 
@@ -336,7 +352,7 @@ fun DrawerMenuContent(
                 onNavigateToPayment()
             }
         )
-        DrawerMenuItem(text = "ПРОМОКОД", badge = "1", onClick = { 
+        DrawerMenuItem(text = "ПРОМОКОД", badge = "1", onClick = {
             onClose()
             onNavigateToPromoCode()
         })
