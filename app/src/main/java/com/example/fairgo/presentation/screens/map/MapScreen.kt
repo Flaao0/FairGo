@@ -41,15 +41,17 @@ import com.yandex.mapkit.user_location.UserLocationView
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @Composable
 fun MapScreen(
     viewModel: MapViewModel,
     onNavigateToAddressSelection: () -> Unit,
     onNavigateToPayment: () -> Unit,
+    onNavigateToPromoCode: () -> Unit,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val recentAddresses by viewModel.recentAddresses.collectAsState()
@@ -163,7 +165,8 @@ fun MapScreen(
             DrawerMenuContent(
                 onClose = { scope.launch { drawerState.close() } },
                 onLogout = { /* TODO */ },
-                onNavigateToPayment = onNavigateToPayment
+                onNavigateToPayment = onNavigateToPayment,
+                onNavigateToPromoCode = onNavigateToPromoCode
             )
         },
     ) {
@@ -280,15 +283,12 @@ fun MapScreen(
     }
 }
 
-// -----------------------------------------------------------------------------------------
-// ФУНКЦИИ КОМПОНЕНТОВ (Вынесены за пределы MapScreen)
-// -----------------------------------------------------------------------------------------
-
 @Composable
 fun DrawerMenuContent(
     onClose: () -> Unit,
     onLogout: () -> Unit,
     onNavigateToPayment: () -> Unit,
+    onNavigateToPromoCode: () -> Unit
 ) {
     ModalDrawerSheet(
         drawerContainerColor = Color.White,
@@ -336,7 +336,10 @@ fun DrawerMenuContent(
                 onNavigateToPayment()
             }
         )
-        DrawerMenuItem(text = "ПРОМОКОД", badge = "1", onClick = { onClose() })
+        DrawerMenuItem(text = "ПРОМОКОД", badge = "1", onClick = { 
+            onClose()
+            onNavigateToPromoCode()
+        })
         DrawerMenuItem(text = "ПОДДЕРЖКА", onClick = { onClose() })
 
         Spacer(modifier = Modifier.weight(1f))

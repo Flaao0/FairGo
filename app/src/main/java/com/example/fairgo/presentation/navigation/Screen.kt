@@ -7,5 +7,6 @@ sealed class Screen(val route: String) {
     data object Map : Screen("map")
     data object AddressSelection : Screen("address_selection")
     data object Payment : Screen("payment")
+    data object PromoCode : Screen("promo_code")
 }
 

@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.fairgo.presentation.screens.AddCardScreen
+import com.example.fairgo.presentation.screens.PromoCodeScreen
 import com.example.fairgo.presentation.screens.auth.AuthViewModel
 import com.example.fairgo.presentation.screens.auth.SignInScreen
 import com.example.fairgo.presentation.screens.auth.SignUpScreen
@@ -67,6 +68,9 @@ fun FairGoNavGraph(
                 onNavigateToAddressSelection = { /* ... твой код ... */ },
                 onNavigateToPayment = {
                     navController.navigate(Screen.Payment.route)
+                },
+                onNavigateToPromoCode = {
+                    navController.navigate(Screen.PromoCode.route)
                 }
             )
         }
@@ -82,6 +86,12 @@ fun FairGoNavGraph(
             AddressSelectionScreen(
                 viewModel = viewModel,
                 onBack = { navController.popBackStack() },
+            )
+        }
+
+        composable(Screen.PromoCode.route) {
+            PromoCodeScreen(
+                onBackClick = { navController.popBackStack() }
             )
         }
     }
