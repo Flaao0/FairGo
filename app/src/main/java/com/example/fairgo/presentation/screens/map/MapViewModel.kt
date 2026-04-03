@@ -18,13 +18,20 @@ class MapViewModel @Inject constructor() : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    private val _fromAddress = MutableStateFlow("")
+    private val _fromAddress = MutableStateFlow("ул. Таубе, д. 15")
     val fromAddress: StateFlow<String> = _fromAddress.asStateFlow()
 
     private val _toAddress = MutableStateFlow("")
     val toAddress: StateFlow<String> = _toAddress.asStateFlow()
 
-    private val _recentAddresses = MutableStateFlow<List<AddressItem>>(emptyList())
+    private val _recentAddresses = MutableStateFlow<List<AddressItem>>(
+        listOf(
+            AddressItem("ул. Таубе, 15", "Омск"),
+            AddressItem("ул. Старозагородная Роща, д. 8", "Омск"),
+            AddressItem("1-й Самарский переулок, д. 18", "Омск"),
+            AddressItem("ул. Кирова, д. 20", "Омск"),
+        )
+    )
     val recentAddresses: StateFlow<List<AddressItem>> = _recentAddresses.asStateFlow()
 
     fun onSearchQueryChanged(value: String) {
@@ -48,4 +55,3 @@ class MapViewModel @Inject constructor() : ViewModel() {
         return isValidUserPoint(point) && _toAddress.value.isNotBlank()
     }
 }
-

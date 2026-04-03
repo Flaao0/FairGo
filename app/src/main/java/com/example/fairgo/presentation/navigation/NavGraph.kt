@@ -65,7 +65,9 @@ fun FairGoNavGraph(
         composable(Screen.Map.route) {
             MapScreen(
                 viewModel = hiltViewModel(),
-                onNavigateToAddressSelection = { /* ... твой код ... */ },
+                onNavigateToAddressSelection = { 
+                    navController.navigate(Screen.AddressSelection.route)
+                },
                 onNavigateToPayment = {
                     navController.navigate(Screen.Payment.route)
                 },
