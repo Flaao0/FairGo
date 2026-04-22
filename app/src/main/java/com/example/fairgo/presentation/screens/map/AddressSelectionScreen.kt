@@ -30,6 +30,7 @@ import com.example.fairgo.presentation.theme.FairGoGreen
 import com.example.fairgo.presentation.theme.FairGoTextPrimary
 import com.example.fairgo.presentation.theme.FairGoTextSecondary
 import com.example.fairgo.presentation.theme.FairGoWhite
+import com.yandex.mapkit.search.SuggestItem
 
 @Composable
 fun AddressSelectionScreen(
@@ -38,7 +39,7 @@ fun AddressSelectionScreen(
 ) {
     val fromAddress by viewModel.fromAddress.collectAsState()
     val toAddress by viewModel.toAddress.collectAsState()
-    val recent by viewModel.recentAddresses.collectAsState()
+    val suggestions by viewModel.addressSuggestions.collectAsState()
     val toAddressFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -183,12 +184,12 @@ fun AddressSelectionScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // Список недавних
+            // Список подсказок
             Column(modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)) {
                 Text(
-                    text = "НЕДАВНИЕ",
+                    text = "ПОДСКАЗКИ",
                     color = Color(0xFF98A7B5),
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontWeight = FontWeight.Bold,
@@ -198,13 +199,13 @@ fun AddressSelectionScreen(
                 )
 
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(recent) { item ->
-                        AddressRow(
+                    items(suggestions) { item ->
+                        SuggestionRow(
                             item = item,
                             onClick = {
-                                viewModel.onToAddressChanged(item.street)
-                                viewModel.buildRouteToAddress(item) // Строим маршрут
-                                onBack() // Возвращаемся на главную карту
+                                viewModel.selectSuggestion(item) {
+                                    onBack()
+                                }
                             }
                         )
                         HorizontalDivider(thickness = 1.dp, color = Color(0xFFF2F4F5))
@@ -266,7 +267,10 @@ private fun transparentTextFieldColors() = TextFieldDefaults.colors(
 )
 
 @Composable
-private fun AddressRow(item: AddressItem, onClick: () -> Unit) {
+private fun SuggestionRow(item: SuggestItem, onClick: () -> Unit) {
+    val title = item.title.text
+    val subtitle = item.subtitle?.text.orEmpty()
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -291,12 +295,12 @@ private fun AddressRow(item: AddressItem, onClick: () -> Unit) {
         }
         Column {
             Text(
-                text = item.street,
+                text = title,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                 color = FairGoTextPrimary
             )
             Text(
-                text = item.city,
+                text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = FairGoTextSecondary
             )

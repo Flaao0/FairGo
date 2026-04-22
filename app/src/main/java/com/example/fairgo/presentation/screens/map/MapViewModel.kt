@@ -11,8 +11,21 @@ import com.yandex.mapkit.directions.driving.DrivingRouter
 import com.yandex.mapkit.directions.driving.DrivingRouterType
 import com.yandex.mapkit.directions.driving.DrivingSession
 import com.yandex.mapkit.directions.driving.VehicleOptions
+import com.yandex.mapkit.geometry.BoundingBox
+import com.yandex.mapkit.geometry.Geometry
 import com.yandex.mapkit.geometry.Point
 import com.yandex.mapkit.geometry.Polyline
+import com.yandex.mapkit.search.Response
+import com.yandex.mapkit.search.SearchFactory
+import com.yandex.mapkit.search.SearchManager
+import com.yandex.mapkit.search.SearchManagerType
+import com.yandex.mapkit.search.SearchOptions
+import com.yandex.mapkit.search.Session
+import com.yandex.mapkit.search.SuggestItem
+import com.yandex.mapkit.search.SuggestOptions
+import com.yandex.mapkit.search.SuggestResponse
+import com.yandex.mapkit.search.SuggestSession
+import com.yandex.runtime.Error
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +49,9 @@ class MapViewModel @Inject constructor() : ViewModel() {
     private val _toAddress = MutableStateFlow("")
     val toAddress: StateFlow<String> = _toAddress.asStateFlow()
 
+    private val _addressSuggestions = MutableStateFlow<List<SuggestItem>>(emptyList())
+    val addressSuggestions: StateFlow<List<SuggestItem>> = _addressSuggestions.asStateFlow()
+
     private var currentUserLocation: Point? = null
 
     fun updateUserLocation(point: Point) {
@@ -55,6 +71,10 @@ class MapViewModel @Inject constructor() : ViewModel() {
     private val drivingRouter: DrivingRouter =
         DirectionsFactory.getInstance().createDrivingRouter(DrivingRouterType.COMBINED)
     private var drivingSession: DrivingSession? = null
+    private val searchManager: SearchManager =
+        SearchFactory.getInstance().createSearchManager(SearchManagerType.COMBINED)
+    private val suggestSession: SuggestSession = searchManager.createSuggestSession()
+    private var searchSession: Session? = null
 
     private val _routeGeometry = MutableStateFlow<Polyline?>(null)
     val routeGeometry: StateFlow<Polyline?> = _routeGeometry.asStateFlow()
@@ -109,14 +129,84 @@ class MapViewModel @Inject constructor() : ViewModel() {
 
     fun onToAddressChanged(value: String) {
         _toAddress.value = value
+        suggestAddress(value)
     }
 
     fun onSearchQueryChanged(value: String) {
         _searchQuery.value = value
     }
 
+    fun suggestAddress(query: String) {
+        val normalizedQuery = query.trim()
+        if (normalizedQuery.isBlank()) {
+            _addressSuggestions.value = emptyList()
+            suggestSession.reset()
+            return
+        }
+
+        suggestSession.suggest(
+            normalizedQuery,
+            WORLD_BOUNDING_BOX,
+            SuggestOptions(),
+            object : SuggestSession.SuggestListener {
+                override fun onResponse(response: SuggestResponse) {
+                    _addressSuggestions.value = response.items
+                }
+
+                override fun onError(error: Error) {
+                    Log.e("MAP_DEBUG", "Ошибка подсказок: $error")
+                    _addressSuggestions.value = emptyList()
+                }
+            }
+        )
+    }
+
+    fun selectSuggestion(item: SuggestItem, onRouteReady: () -> Unit) {
+        val queryText = item.displayText?.takeIf { it.isNotBlank() }
+            ?: item.title.text.takeIf { it.isNotBlank() }
+            ?: return
+
+        _toAddress.value = queryText
+        _addressSuggestions.value = emptyList()
+
+        val start = currentUserLocation ?: Point(53.243562, 34.372500)
+        searchSession?.cancel()
+        searchSession = searchManager.submit(
+            queryText,
+            Geometry.fromBoundingBox(WORLD_BOUNDING_BOX),
+            SearchOptions(),
+            object : Session.SearchListener {
+                override fun onSearchResponse(response: Response) {
+                    val endPoint = response.collection.children.firstNotNullOfOrNull { child ->
+                        child.obj?.geometry?.firstOrNull()?.point
+                    }
+
+                    if (endPoint != null) {
+                        buildRoute(start, endPoint)
+                        onRouteReady()
+                    } else {
+                        Log.e("MAP_DEBUG", "Не удалось получить координаты из подсказки")
+                    }
+                }
+
+                override fun onSearchError(error: Error) {
+                    Log.e("MAP_DEBUG", "Ошибка поиска координат: $error")
+                }
+            }
+        )
+    }
+
     override fun onCleared() {
         super.onCleared()
         drivingSession?.cancel()
+        suggestSession.reset()
+        searchSession?.cancel()
+    }
+
+    private companion object {
+        val WORLD_BOUNDING_BOX = BoundingBox(
+            Point(-90.0, -180.0),
+            Point(90.0, 180.0)
+        )
     }
 }
