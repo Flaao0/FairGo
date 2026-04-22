@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,8 +59,18 @@ fun SignInScreen(
 ) {
     val email by viewModel.email.collectAsState()
     val password by viewModel.password.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val isSuccess by viewModel.isSuccess.collectAsState()
 
     var passwordVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isSuccess) {
+        if (isSuccess) {
+            onSignInSuccess()
+            viewModel.resetSuccessState()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -116,9 +127,20 @@ fun SignInScreen(
         Spacer(Modifier.height(24.dp))
 
         PrimaryGreenButton(
-            text = "Войти",
-            onClick = onSignInSuccess,
+            text = if (isLoading) "Вход..." else "Войти",
+            onClick = viewModel::login,
+            enabled = !isLoading,
         )
+
+        if (error != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = error.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+            )
+        }
 
         Spacer(Modifier.height(26.dp))
 

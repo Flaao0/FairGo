@@ -17,6 +17,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,8 +46,18 @@ fun SignUpScreen(
     val name by viewModel.name.collectAsState()
     val email by viewModel.email.collectAsState()
     val password by viewModel.password.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val isSuccess by viewModel.isSuccess.collectAsState()
 
     var passwordVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isSuccess) {
+        if (isSuccess) {
+            onSignUpSuccess()
+            viewModel.resetSuccessState()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -111,9 +122,20 @@ fun SignUpScreen(
         Spacer(Modifier.height(26.dp))
 
         PrimaryGreenButton(
-            text = "Зарегистрироваться",
-            onClick = { onSignUpSuccess() },
+            text = if (isLoading) "Регистрация..." else "Зарегистрироваться",
+            onClick = viewModel::register,
+            enabled = !isLoading,
         )
+
+        if (error != null) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = error.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+            )
+        }
 
         Spacer(Modifier.weight(1f))
 

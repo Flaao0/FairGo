@@ -1,6 +1,7 @@
 package com.example.fairgo.presentation.screens.map
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -44,13 +45,15 @@ fun AddressSelectionScreen(
         toAddressFocusRequester.requestFocus()
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFF7F7F7))) {
-        // Mock Map Background at the top
+    Box(modifier = Modifier
+        .fillMaxSize()
+        .background(Color(0xFFF7F7F7))) {
+        // Заглушка вместо карты сверху
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(200.dp)
-                .background(Color(0xFFE8EAED)) // Светло-серый цвет вместо карты
+                .background(Color(0xFFE8EAED))
         )
 
         Column(
@@ -67,7 +70,9 @@ fun AddressSelectionScreen(
             ) {
                 Surface(
                     onClick = onBack,
-                    modifier = Modifier.size(40.dp).shadow(4.dp, CircleShape),
+                    modifier = Modifier
+                        .size(40.dp)
+                        .shadow(4.dp, CircleShape),
                     shape = CircleShape,
                     color = FairGoWhite
                 ) {
@@ -80,7 +85,7 @@ fun AddressSelectionScreen(
                         )
                     }
                 }
-                
+
                 Text(
                     text = "Выберите адрес",
                     style = MaterialTheme.typography.titleLarge.copy(
@@ -95,7 +100,7 @@ fun AddressSelectionScreen(
 
             Spacer(Modifier.height(16.dp))
 
-            // Selection Card
+            // Карточка ввода адресов
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -108,7 +113,6 @@ fun AddressSelectionScreen(
                     modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Drag handle
                     Box(
                         modifier = Modifier
                             .size(width = 36.dp, height = 4.dp)
@@ -128,7 +132,7 @@ fun AddressSelectionScreen(
                                 .padding(top = 16.dp)
                                 .size(width = 18.dp, height = 80.dp)
                         )
-                        
+
                         Column(modifier = Modifier.weight(1f)) {
                             TextField(
                                 value = fromAddress,
@@ -143,7 +147,9 @@ fun AddressSelectionScreen(
                             TextField(
                                 value = toAddress,
                                 onValueChange = viewModel::onToAddressChanged,
-                                modifier = Modifier.fillMaxWidth().focusRequester(toAddressFocusRequester),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(toAddressFocusRequester),
                                 singleLine = true,
                                 placeholder = { Text("Куда", color = FairGoTextSecondary) },
                                 colors = transparentTextFieldColors(),
@@ -156,7 +162,7 @@ fun AddressSelectionScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // Map shortcut
+            // Кнопка на карту
             Row(
                 modifier = Modifier.padding(horizontal = 32.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -177,8 +183,10 @@ fun AddressSelectionScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // Recent addresses list
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            // Список недавних
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)) {
                 Text(
                     text = "НЕДАВНИЕ",
                     color = Color(0xFF98A7B5),
@@ -191,7 +199,14 @@ fun AddressSelectionScreen(
 
                 LazyColumn(modifier = Modifier.fillMaxWidth()) {
                     items(recent) { item ->
-                        AddressRow(item = item)
+                        AddressRow(
+                            item = item,
+                            onClick = {
+                                viewModel.onToAddressChanged(item.street)
+                                viewModel.buildRouteToAddress(item) // Строим маршрут
+                                onBack() // Возвращаемся на главную карту
+                            }
+                        )
                         HorizontalDivider(thickness = 1.dp, color = Color(0xFFF2F4F5))
                     }
                 }
@@ -207,7 +222,10 @@ private fun RouteIndicator(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(FairGoGreen))
+        Box(modifier = Modifier
+            .size(10.dp)
+            .clip(CircleShape)
+            .background(FairGoGreen))
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -248,9 +266,12 @@ private fun transparentTextFieldColors() = TextFieldDefaults.colors(
 )
 
 @Composable
-private fun AddressRow(item: AddressItem) {
+private fun AddressRow(item: AddressItem, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {

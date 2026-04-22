@@ -1,6 +1,7 @@
 package com.example.fairgo.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -19,10 +20,11 @@ import com.example.fairgo.presentation.screens.map.MapViewModel
 @Composable
 fun FairGoNavGraph(
     navController: NavHostController = rememberNavController(),
+    startDestination: String = Screen.Welcome.route,
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Welcome.route,
+        startDestination = startDestination,
     ) {
         composable(Screen.Welcome.route) {
             WelcomeScreen(
@@ -62,10 +64,14 @@ fun FairGoNavGraph(
             )
         }
 
+        // ЭКРАН КАРТЫ
         composable(Screen.Map.route) {
+            // Создаем основную ViewModel здесь
+            val viewModel: MapViewModel = hiltViewModel()
+
             MapScreen(
-                viewModel = hiltViewModel(),
-                onNavigateToAddressSelection = { 
+                viewModel = viewModel,
+                onNavigateToAddressSelection = {
                     navController.navigate(Screen.AddressSelection.route)
                 },
                 onNavigateToPayment = {
@@ -77,16 +83,24 @@ fun FairGoNavGraph(
             )
         }
 
-        composable(Screen.Payment.route) { // Убедись, что создал объект Payment в своем классе Screen
+        composable(Screen.Payment.route) {
             AddCardScreen(
                 onBackClick = { navController.popBackStack() }
             )
         }
 
-        composable(Screen.AddressSelection.route) {
-            val viewModel: MapViewModel = hiltViewModel()
+        // ЭКРАН ВЫБОРА АДРЕСА
+        composable(Screen.AddressSelection.route) { backStackEntry ->
+            // Магия: находим в истории навигации запись экрана Карты
+            val parentEntry = remember(backStackEntry) {
+                navController.getBackStackEntry(Screen.Map.route)
+            }
+
+            // Получаем ТУ ЖЕ САМУЮ ViewModel, которая привязана к экрану карты
+            val sharedViewModel: MapViewModel = hiltViewModel(parentEntry)
+
             AddressSelectionScreen(
-                viewModel = viewModel,
+                viewModel = sharedViewModel,
                 onBack = { navController.popBackStack() },
             )
         }
@@ -98,4 +112,3 @@ fun FairGoNavGraph(
         }
     }
 }
-

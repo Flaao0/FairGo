@@ -2,6 +2,7 @@ package com.example.fairgo.presentation.screens.map
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Log
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.compose.foundation.background
@@ -63,12 +64,14 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.yandex.mapkit.Animation
 import com.yandex.mapkit.MapKitFactory
+import com.yandex.mapkit.geometry.Geometry
 import com.yandex.mapkit.geometry.Point
 import com.yandex.mapkit.layers.ObjectEvent
 import com.yandex.mapkit.logo.HorizontalAlignment
 import com.yandex.mapkit.logo.Padding
 import com.yandex.mapkit.logo.VerticalAlignment
 import com.yandex.mapkit.map.CameraPosition
+import com.yandex.mapkit.map.PolylineMapObject
 import com.yandex.mapkit.mapview.MapView
 import com.yandex.mapkit.user_location.UserLocationObjectListener
 import com.yandex.mapkit.user_location.UserLocationView
@@ -85,7 +88,9 @@ fun MapScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
     val recentAddresses by viewModel.recentAddresses.collectAsState()
+    val routeGeometry by viewModel.routeGeometry.collectAsState()
 
     val hasLocationPermission = remember(context) {
         ContextCompat.checkSelfPermission(
@@ -97,9 +102,10 @@ fun MapScreen(
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    var lastUserPoint by remember { mutableStateOf<Point?>(null) }
-
     var hasCenteredToUserLocation by remember { mutableStateOf(false) }
+
+    // Спасаем линию от сборщика мусора
+    var routePolylineMapObject by remember { mutableStateOf<PolylineMapObject?>(null) }
 
     val mapView = remember {
         val density = context.resources.displayMetrics.density
@@ -124,6 +130,11 @@ fun MapScreen(
         }
     }
 
+    // 1. Создаем ОТДЕЛЬНУЮ коллекцию только для маршрута, чтобы не ломать карту очисткой
+    val routeCollection = remember(mapView) {
+        mapView.mapWindow.map.mapObjects.addCollection()
+    }
+
     val userLocationLayer = remember {
         MapKitFactory.getInstance().createUserLocationLayer(mapView.mapWindow).apply {
             isHeadingEnabled = true
@@ -136,6 +147,8 @@ fun MapScreen(
 
             private fun tryCenterMap(point: Point) {
                 if (point.latitude == 0.0 && point.longitude == 0.0) return
+
+                viewModel.updateUserLocation(point)
 
                 if (!hasCenteredToUserLocation) {
                     mapView.mapWindow.map.move(
@@ -172,6 +185,7 @@ fun MapScreen(
             while (!hasCenteredToUserLocation) {
                 val camera = userLocationLayer.cameraPosition()
                 if (camera != null && camera.target.latitude != 0.0 && camera.target.longitude != 0.0) {
+                    viewModel.updateUserLocation(camera.target)
                     mapView.mapWindow.map.move(
                         CameraPosition(camera.target, 17f, 0f, 0f),
                         Animation(Animation.Type.SMOOTH, 0.5f),
@@ -201,12 +215,50 @@ fun MapScreen(
                 else -> Unit
             }
         }
-
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
+
+    // --- БРОНЕБОЙНАЯ ОТРИСОВКА МАРШРУТА ---
+    LaunchedEffect(routeGeometry) {
+        // Очищаем ТОЛЬКО коллекцию маршрутов, а не всю карту
+        routeCollection.clear()
+
+        val currentRoute = routeGeometry
+        if (currentRoute != null) {
+            try {
+                Log.d("MAP_DEBUG", "Начинаем рисовать линию на карте...")
+
+                // Добавляем полилинию в нашу отдельную коллекцию
+                val polyline = routeCollection.addPolyline(currentRoute)
+
+                // 2. Используем железобетонный android.graphics.Color
+                polyline.setStrokeColor(android.graphics.Color.parseColor("#2C68FF"))
+                polyline.setStrokeWidth(6f)
+                polyline.setZIndex(100f)
+
+                routePolylineMapObject = polyline
+                Log.d("MAP_DEBUG", "Линия успешно добавлена в routeCollection!")
+
+                // 3. Пытаемся подвинуть камеру
+                val geometry = Geometry.fromPolyline(currentRoute)
+                val cameraPosition = mapView.mapWindow.map.cameraPosition(geometry)
+
+                mapView.mapWindow.map.move(
+                    CameraPosition(cameraPosition.target, cameraPosition.zoom - 0.8f, 0f, 0f),
+                    Animation(Animation.Type.SMOOTH, 1.2f),
+                    null
+                )
+                Log.d("MAP_DEBUG", "Камера успешно передвинута к маршруту!")
+
+            } catch (e: Exception) {
+                Log.e("MAP_DEBUG", "КРАШ при отрисовке маршрута: ${e.message}")
+            }
+        }
+    }
+    // --------------------------------------------
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -331,6 +383,7 @@ fun MapScreen(
     }
 }
 
+// ... Оставшийся код (DrawerMenuContent, AddressListItem и т.д.) без изменений ...
 @Composable
 fun DrawerMenuContent(
     onClose: () -> Unit,
