@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -41,7 +42,7 @@ import com.example.fairgo.presentation.theme.FairGoWhite
 fun SignUpScreen(
     viewModel: AuthViewModel,
     onNavigateToSignIn: () -> Unit,
-    onSignUpSuccess: () -> Unit
+    onSignUpSuccess: () -> Unit,
 ) {
     val name by viewModel.name.collectAsState()
     val email by viewModel.email.collectAsState()
@@ -84,11 +85,11 @@ fun SignUpScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AuthFieldLabel("ЭЛЕКТРОННАЯ ПОЧТА")
+                AuthFieldLabel("НОМЕР ТЕЛЕФОНА")
                 AuthOutlinedField(
                     value = email,
                     onValueChange = viewModel::onEmailChanged,
-                    keyboardOptions = KeyboardOptions.Default,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 )
             }
 
