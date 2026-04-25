@@ -31,6 +31,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 data class AddressItem(
     val street: String,
@@ -161,9 +162,9 @@ class MapViewModel @Inject constructor() : ViewModel() {
         )
     }
 
-    fun selectSuggestion(item: SuggestItem, onRouteReady: () -> Unit) {
-        val queryText = item.displayText?.takeIf { it.isNotBlank() }
-            ?: item.title.text.takeIf { it.isNotBlank() }
+    fun onAddressSelected(suggestItem: SuggestItem) {
+        val queryText = suggestItem.displayText?.takeIf { it.isNotBlank() }
+            ?: suggestItem.title.text.takeIf { it.isNotBlank() }
             ?: return
 
         _toAddress.value = queryText
@@ -182,8 +183,17 @@ class MapViewModel @Inject constructor() : ViewModel() {
                     }
 
                     if (endPoint != null) {
+                        val newAddress = AddressItem(
+                            street = suggestItem.title.text,
+                            city = suggestItem.subtitle?.text.orEmpty(),
+                            point = endPoint
+                        )
+                        _recentAddresses.update { addresses ->
+                            listOf(newAddress) + addresses.filterNot {
+                                it.street == newAddress.street && it.city == newAddress.city
+                            }
+                        }
                         buildRoute(start, endPoint)
-                        onRouteReady()
                     } else {
                         Log.e("MAP_DEBUG", "Не удалось получить координаты из подсказки")
                     }

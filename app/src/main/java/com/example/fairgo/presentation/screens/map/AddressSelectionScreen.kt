@@ -40,6 +40,7 @@ fun AddressSelectionScreen(
     val fromAddress by viewModel.fromAddress.collectAsState()
     val toAddress by viewModel.toAddress.collectAsState()
     val suggestions by viewModel.addressSuggestions.collectAsState()
+    val showSuggestions = toAddress.isNotBlank()
     val toAddressFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -184,31 +185,32 @@ fun AddressSelectionScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // Список подсказок
-            Column(modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)) {
-                Text(
-                    text = "ПОДСКАЗКИ",
-                    color = Color(0xFF98A7B5),
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    ),
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
+            if (showSuggestions) {
+                // Список подсказок при вводе в поле "Куда"
+                Column(modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)) {
+                    Text(
+                        text = "ПОДСКАЗКИ",
+                        color = Color(0xFF98A7B5),
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        ),
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
 
-                LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(suggestions) { item ->
-                        SuggestionRow(
-                            item = item,
-                            onClick = {
-                                viewModel.selectSuggestion(item) {
+                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                        items(suggestions) { item ->
+                            SuggestionRow(
+                                item = item,
+                                onClick = {
+                                    viewModel.onAddressSelected(item)
                                     onBack()
                                 }
-                            }
-                        )
-                        HorizontalDivider(thickness = 1.dp, color = Color(0xFFF2F4F5))
+                            )
+                            HorizontalDivider(thickness = 1.dp, color = Color(0xFFF2F4F5))
+                        }
                     }
                 }
             }

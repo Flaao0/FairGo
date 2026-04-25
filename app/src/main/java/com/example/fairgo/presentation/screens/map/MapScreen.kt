@@ -370,7 +370,10 @@ fun MapScreen(
                                 .wrapContentHeight(),
                         ) {
                             recentAddresses.take(2).forEach { address ->
-                                AddressListItem(address)
+                                AddressListItem(
+                                    address = address,
+                                    onClick = { viewModel.buildRouteToAddress(address) }
+                                )
                                 HorizontalDivider(
                                     Modifier, DividerDefaults.Thickness, color = Color(0xFFDCE2E8)
                                 )
@@ -484,10 +487,14 @@ private fun FloatingCircleButton(
 }
 
 @Composable
-private fun AddressListItem(address: AddressItem) {
+private fun AddressListItem(
+    address: AddressItem,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
