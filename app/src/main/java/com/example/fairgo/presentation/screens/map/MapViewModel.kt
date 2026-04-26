@@ -2,6 +2,9 @@ package com.example.fairgo.presentation.screens.map
 
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.fairgo.data.network.models.RideResponse
+import com.example.fairgo.data.repository.RideRepository
 import com.yandex.mapkit.RequestPoint
 import com.yandex.mapkit.RequestPointType
 import com.yandex.mapkit.directions.DirectionsFactory
@@ -32,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 data class AddressItem(
     val street: String,
@@ -39,8 +43,25 @@ data class AddressItem(
     val point: Point? = null,
 )
 
+data class TariffOption(
+    val id: String,
+    val name: String,
+    val price: Int,
+    val pickupTime: Int,
+    val isSelected: Boolean,
+)
+
+sealed class OrderState {
+    data object Idle : OrderState()
+    data object Loading : OrderState()
+    data class Created(val ride: RideResponse) : OrderState()
+    data class Error(val message: String) : OrderState()
+}
+
 @HiltViewModel
-class MapViewModel @Inject constructor() : ViewModel() {
+class MapViewModel @Inject constructor(
+    private val rideRepository: RideRepository,
+) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -54,6 +75,11 @@ class MapViewModel @Inject constructor() : ViewModel() {
     val addressSuggestions: StateFlow<List<SuggestItem>> = _addressSuggestions.asStateFlow()
 
     private var currentUserLocation: Point? = null
+    private var lastRouteFinishPoint: Point? = null
+
+    val orderState = MutableStateFlow<OrderState>(OrderState.Idle)
+    val tariffs = MutableStateFlow<List<TariffOption>>(emptyList())
+    val routeEta = MutableStateFlow(0)
 
     fun updateUserLocation(point: Point) {
         currentUserLocation = point
@@ -84,6 +110,10 @@ class MapViewModel @Inject constructor() : ViewModel() {
         // Если ты в Брянске, старт будет там. Если GPS не поймал - берем Набережную как дефолт
         val start = currentUserLocation ?: Point(53.243562, 34.372500)
         val end = item.point
+        lastRouteFinishPoint = end
+        orderState.value = OrderState.Idle
+        tariffs.value = emptyList()
+        routeEta.value = 0
 
         Log.d("MAP_DEBUG", "Запрос маршрута: Start=$start, End=$end")
 
@@ -94,6 +124,10 @@ class MapViewModel @Inject constructor() : ViewModel() {
 
     fun buildRoute(startPoint: Point, endPoint: Point) {
         _routeGeometry.value = null
+        lastRouteFinishPoint = endPoint
+        orderState.value = OrderState.Idle
+        tariffs.value = emptyList()
+        routeEta.value = 0
 
         val requestPoints = listOf(
             RequestPoint(startPoint, RequestPointType.WAYPOINT, null, null),
@@ -112,6 +146,10 @@ class MapViewModel @Inject constructor() : ViewModel() {
                             "Успех! Маршрут построен. Точек в линии: ${routes.first().geometry.points.size}"
                         )
                         _routeGeometry.value = routes.first().geometry
+
+                        // Позже привяжем к данным Яндекса, пока — динамика "на лету"
+                        routeEta.value = (10..20).random()
+                        calculateTariffs(basePrice = (150..250).random())
                     } else {
                         Log.e("MAP_DEBUG", "Яндекс вернул пустой список маршрутов")
                     }
@@ -183,6 +221,11 @@ class MapViewModel @Inject constructor() : ViewModel() {
                     }
 
                     if (endPoint != null) {
+                        lastRouteFinishPoint = endPoint
+                        orderState.value = OrderState.Idle
+                        tariffs.value = emptyList()
+                        routeEta.value = 0
+
                         val newAddress = AddressItem(
                             street = suggestItem.title.text,
                             city = suggestItem.subtitle?.text.orEmpty(),
@@ -204,6 +247,59 @@ class MapViewModel @Inject constructor() : ViewModel() {
                 }
             }
         )
+    }
+
+    fun calculateTariffs(basePrice: Int) {
+        val standard = TariffOption(
+            id = "standard",
+            name = "Стандарт",
+            price = basePrice,
+            pickupTime = (2..5).random(),
+            isSelected = false,
+        )
+        val lux = TariffOption(
+            id = "lux",
+            name = "Люкс",
+            price = basePrice + (50..200).random(),
+            pickupTime = (8..15).random(),
+            isSelected = true,
+        )
+        val kids = TariffOption(
+            id = "kids",
+            name = "Детское",
+            price = basePrice + (100..150).random(),
+            pickupTime = (4..10).random(),
+            isSelected = false,
+        )
+
+        tariffs.value = listOf(standard, lux, kids)
+    }
+
+    fun selectTariff(id: String) {
+        tariffs.value = tariffs.value.map { it.copy(isSelected = it.id == id) }
+    }
+
+    fun orderTaxi(selectedPrice: Int? = null) {
+        val start = currentUserLocation
+        val finish = lastRouteFinishPoint
+
+        if (start == null || finish == null) {
+            orderState.value = OrderState.Error("Не удалось определить точки маршрута")
+            return
+        }
+
+        viewModelScope.launch {
+            orderState.value = OrderState.Loading
+            val result = rideRepository.createRide(start = start, finish = finish)
+            orderState.value = result.fold(
+                onSuccess = { ride -> OrderState.Created(ride) },
+                onFailure = { e -> OrderState.Error(e.message ?: "Не удалось создать заказ") }
+            )
+        }
+    }
+
+    fun cancelOrder() {
+        orderState.value = OrderState.Idle
     }
 
     override fun onCleared() {

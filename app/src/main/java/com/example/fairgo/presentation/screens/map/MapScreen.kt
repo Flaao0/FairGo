@@ -5,35 +5,59 @@ import android.content.pm.PackageManager
 import android.util.Log
 import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -91,6 +115,9 @@ fun MapScreen(
 
     val recentAddresses by viewModel.recentAddresses.collectAsState()
     val routeGeometry by viewModel.routeGeometry.collectAsState()
+    val orderState by viewModel.orderState.collectAsState()
+    val tariffs by viewModel.tariffs.collectAsState()
+    val routeEta by viewModel.routeEta.collectAsState()
 
     val hasLocationPermission = remember(context) {
         ContextCompat.checkSelfPermission(
@@ -307,82 +334,496 @@ fun MapScreen(
                     .padding(end = 16.dp, bottom = 140.dp),
             )
 
-            Card(
+            AnimatedContent(
+                targetState = routeGeometry != null && orderState !is OrderState.Created,
+                transitionSpec = {
+                    (fadeIn(tween(200)) + slideInVertically(tween(260)) { it / 4 })
+                        .togetherWith(fadeOut(tween(160)) + slideOutVertically(tween(220)) { it / 6 })
+                        .using(SizeTransform(clip = false))
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(),
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                label = "bottom_card",
+            ) { showRideCard ->
+                if (showRideCard) {
+                    RideOptionsCard(
+                        tariffs = tariffs,
+                        routeEtaMinutes = routeEta,
+                        orderState = orderState,
+                        onSelectTariff = { viewModel.selectTariff(it) },
+                        onOrderClick = {
+                            val selected = tariffs.firstOrNull { it.isSelected }
+                            viewModel.orderTaxi(selectedPrice = selected?.price)
+                        },
+                    )
+                } else {
+                    DefaultSearchCard(
+                        recentAddresses = recentAddresses,
+                        onNavigateToAddressSelection = onNavigateToAddressSelection,
+                        onRecentClick = { viewModel.buildRouteToAddress(it) },
+                    )
+                }
+            }
+
+            if (orderState is OrderState.Created) {
+                SearchingDriverOverlay(
+                    onCancel = { viewModel.cancelOrder() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DefaultSearchCard(
+    recentAddresses: List<AddressItem>,
+    onNavigateToAddressSelection: () -> Unit,
+    onRecentClick: (AddressItem) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .navigationBarsPadding(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 12.dp)
+                    .size(width = 38.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFD8DDE1)),
+            )
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable(onClick = onNavigateToAddressSelection),
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFFF7F7F7),
+                tonalElevation = 2.dp,
+                shadowElevation = 2.dp,
             ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = Color(0xFF7DB546),
+                    )
+                    Text(
+                        text = "Куда едем?",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color(0xFFA0AAB4),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            if (recentAddresses.isNotEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                        .navigationBarsPadding(),
+                        .wrapContentHeight(),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .padding(bottom = 12.dp)
-                            .size(width = 38.dp, height = 4.dp)
-                            .clip(RoundedCornerShape(50))
-                            .background(Color(0xFFD8DDE1)),
-                    )
-
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .clickable(onClick = onNavigateToAddressSelection),
-                        shape = RoundedCornerShape(18.dp),
-                        color = Color(0xFFF7F7F7),
-                        tonalElevation = 2.dp,
-                        shadowElevation = 2.dp,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = Color(0xFF7DB546),
-                            )
-                            Text(
-                                text = "Куда едем?",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = Color(0xFFA0AAB4),
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    if (recentAddresses.isNotEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .wrapContentHeight(),
-                        ) {
-                            recentAddresses.take(2).forEach { address ->
-                                AddressListItem(
-                                    address = address,
-                                    onClick = { viewModel.buildRouteToAddress(address) }
-                                )
-                                HorizontalDivider(
-                                    Modifier, DividerDefaults.Thickness, color = Color(0xFFDCE2E8)
-                                )
-                            }
-                        }
+                    recentAddresses.take(2).forEach { address ->
+                        AddressListItem(
+                            address = address,
+                            onClick = { onRecentClick(address) }
+                        )
+                        HorizontalDivider(
+                            Modifier, DividerDefaults.Thickness, color = Color(0xFFDCE2E8)
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OrderCard(
+    state: OrderState,
+    onOrderClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .navigationBarsPadding(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 12.dp)
+                    .size(width = 38.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFD8DDE1)),
+            )
+
+            Text(
+                text = when (state) {
+                    OrderState.Idle -> "Готовы заказать поездку?"
+                    OrderState.Loading -> "Создаём заказ…"
+                    is OrderState.Created -> "Поиск водителя..."
+                    is OrderState.Error -> state.message
+                },
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFF3D4754),
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+
+            val isLoading = state == OrderState.Loading
+            val isCreated = state is OrderState.Created
+
+            Button(
+                onClick = onOrderClick,
+                enabled = !isLoading && !isCreated,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7DB546)),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.5.dp,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(text = "Заказываем…", color = Color.White)
+                } else {
+                    Text(
+                        text = if (isCreated) "Заказ создан" else "Заказать такси",
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RideOptionsCard(
+    tariffs: List<TariffOption>,
+    routeEtaMinutes: Int,
+    orderState: OrderState,
+    onSelectTariff: (String) -> Unit,
+    onOrderClick: () -> Unit,
+) {
+    val isLoading = orderState == OrderState.Loading
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 12.dp)
+                .navigationBarsPadding(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 16.dp)
+                    .size(width = 38.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFD8DDE1)),
+            )
+
+            TariffsCarousel(
+                tariffs = tariffs,
+                onSelect = onSelectTariff,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            BottomInfoRow(etaMinutes = routeEtaMinutes)
+
+            Spacer(Modifier.height(16.dp))
+
+            Button(
+                onClick = onOrderClick,
+                enabled = !isLoading,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7DB546)),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp),
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        strokeWidth = 2.5.dp,
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(text = "Заказываем…", color = Color.White)
+                } else {
+                    Text(text = "Заказать такси", color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TariffsCarousel(
+    tariffs: List<TariffOption>,
+    onSelect: (String) -> Unit,
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        items(tariffs, key = { it.id }) { item ->
+            TariffItem(
+                option = item,
+                onClick = { onSelect(item.id) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TariffItem(
+    option: TariffOption,
+    onClick: () -> Unit,
+) {
+    val borderColor = if (option.isSelected) Color(0xFF7DB546) else Color.Transparent
+    val container = Color.White
+    val pickupBg = if (option.isSelected) Color(0xFF7DB546) else Color(0xFFE9EEF2)
+    val pickupText = if (option.isSelected) Color.White else Color(0xFF7B8794)
+
+    val icon = when (option.id) {
+        "kids" -> Icons.Default.ChildCare
+        else -> Icons.Default.DirectionsCar
+    }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = container,
+        shadowElevation = if (option.isSelected) 10.dp else 6.dp,
+        tonalElevation = 0.dp,
+        modifier = Modifier
+            .width(118.dp)
+            .border(width = 1.5.dp, color = borderColor, shape = RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color(0xFF3D4754),
+                    modifier = Modifier.size(22.dp),
+                )
+                if (option.id == "lux") {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFF3F9EC),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FlashOn,
+                            contentDescription = null,
+                            tint = Color(0xFF7DB546),
+                            modifier = Modifier.padding(4.dp).size(14.dp),
+                        )
+                    }
+                }
+            }
+
+            Text(
+                text = option.name,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = Color(0xFF3D4754),
+            )
+
+            Text(
+                text = "${option.price} ₽",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = Color(0xFF3D4754),
+            )
+
+            Surface(
+                color = pickupBg,
+                shape = RoundedCornerShape(50),
+            ) {
+                Text(
+                    text = "${option.pickupTime} мин",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = pickupText,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomInfoRow(etaMinutes: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "Примерное время в пути",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFFA0AAB4),
+            )
+            Text(
+                text = "$etaMinutes мин",
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = Color(0xFF7DB546),
+            )
+        }
+        PaymentRow()
+    }
+}
+
+@Composable
+private fun PaymentRow() {
+    Row(
+        modifier = Modifier
+            .clickable { }
+            .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Default.AttachMoney,
+            contentDescription = null,
+            tint = Color(0xFF7DB546),
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = "Cash",
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = Color(0xFF3D4754),
+        )
+        Spacer(Modifier.width(4.dp))
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = Color(0xFFA0AAB4),
+        )
+    }
+}
+
+@Composable
+private fun SearchingDriverOverlay(
+    onCancel: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xB3000000)),
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.92f),
+            modifier = Modifier
+                .padding(WindowInsets.safeDrawing.asPaddingValues())
+                .padding(start = 16.dp, top = 12.dp)
+                .size(40.dp)
+                .align(Alignment.TopStart),
+            onClick = onCancel,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Отмена",
+                    tint = Color(0xFF3D4754),
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(260.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(260.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFBFC6CC).copy(alpha = 0.30f))
+            )
+            Box(
+                modifier = Modifier
+                    .size(170.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFBFC6CC).copy(alpha = 0.34f))
+            )
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFBFC6CC).copy(alpha = 0.38f))
+            )
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFFF3F5F7),
+                shadowElevation = 8.dp,
+                modifier = Modifier.size(64.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.DirectionsCar,
+                        contentDescription = null,
+                        tint = Color(0xFF3D4754),
+                        modifier = Modifier.size(30.dp),
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = "Поиск такси",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = Color.White,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 64.dp)
+                .navigationBarsPadding(),
+        )
     }
 }
 
