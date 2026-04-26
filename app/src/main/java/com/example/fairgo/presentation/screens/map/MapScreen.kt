@@ -27,11 +27,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +51,7 @@ import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
@@ -79,6 +82,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -373,12 +377,13 @@ fun MapScreen(
             }
 
             if (orderState is OrderState.Accepted) {
-                DriverOnWayCard(
-                    rideId = (orderState as OrderState.Accepted).rideId,
-                    onCancel = { /* TODO: отмена поездки */ },
+                DriverAcceptedCard(
+                    onMessageDriver = { /* TODO: чат */ },
+                    onCancelRide = { viewModel.cancelOrder() },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
                 )
             }
         }
@@ -386,58 +391,158 @@ fun MapScreen(
 }
 
 @Composable
-private fun DriverOnWayCard(
-    rideId: Int,
-    onCancel: () -> Unit,
+private fun DriverAcceptedCard(
+    onMessageDriver: () -> Unit,
+    onCancelRide: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 12.dp)
-                .navigationBarsPadding(),
+    Box(modifier = modifier) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(bottom = 16.dp)
-                    .size(width = 38.dp, height = 4.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFD8DDE1)),
-            )
-
-            Text(
-                text = "Водитель в пути",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color(0xFF3D4754),
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "Статус: ACCEPTED • Ride #$rideId",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF7B8794),
-            )
-
-            Spacer(Modifier.height(14.dp))
-
-            Button(
-                onClick = onCancel,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF1F3F5)),
-                shape = RoundedCornerShape(20.dp),
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp),
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 34.dp, bottom = 18.dp)
+                    .navigationBarsPadding(),
             ) {
-                Text(
-                    text = "Отменить поездку",
-                    color = Color(0xFF3D4754),
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                // Верхний "хэндл" как в дизайне
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(bottom = 12.dp)
+                        .size(width = 46.dp, height = 4.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xFFD8DDE1)),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            text = "Андрей",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFF3D4754),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = Color(0xFFF4C430),
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text = "4.8",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF97A8B7),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.width(14.dp))
+
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        modifier = with(Modifier) { widthIn(min = 120.dp, max = 170.dp) },
+                    ) {
+                        Surface(
+                            color = Color(0xFFF0F2F5),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Text(
+                                text = "У000РА 35",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = Color(0xFF3D4754),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Volkswagen Jetta",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF97A8B7),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = onMessageDriver,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7DB546)),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp),
+                    ) {
+                        Text(
+                            text = "Написать водителю",
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                        )
+                    }
+
+                    Surface(
+                        onClick = onCancelRide,
+                        color = Color.White,
+                        shape = RoundedCornerShape(16.dp),
+                        shadowElevation = 2.dp,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .border(1.dp, Color(0xFFDCE2E8), RoundedCornerShape(16.dp)),
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Отменить",
+                                tint = Color(0xFF97A8B7),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Выпирающая аватарка
+        Surface(
+            shape = CircleShape,
+            color = Color(0xFFE9EEF2),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(x = 20.dp, y = (-30).dp)
+                .size(64.dp)
+                .clip(CircleShape)
+                .border(4.dp, Color.White, CircleShape),
+            shadowElevation = 8.dp,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = Color(0xFF97A8B7),
+                    modifier = Modifier.size(28.dp),
                 )
             }
         }
