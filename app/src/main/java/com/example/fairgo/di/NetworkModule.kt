@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.fairgo.data.local.TokenManager
 import com.example.fairgo.data.network.AuthInterceptor
 import com.example.fairgo.data.network.FairGoApi
+import com.example.fairgo.data.network.RideStatusSocket
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -57,6 +58,12 @@ object NetworkModule {
     @Singleton
     fun provideFairGoApi(retrofit: Retrofit): FairGoApi {
         return retrofit.create(FairGoApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideRideStatusSocket(okHttpClient: OkHttpClient): RideStatusSocket {
+        return RideStatusSocket(okHttpClient)
     }
 
     @Provides

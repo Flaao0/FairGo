@@ -3,6 +3,7 @@ package com.example.fairgo.presentation.screens.map
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.fairgo.data.network.RideStatusSocket
 import com.example.fairgo.data.network.models.RideResponse
 import com.example.fairgo.data.repository.RideRepository
 import com.yandex.mapkit.RequestPoint
@@ -31,6 +32,7 @@ import com.yandex.mapkit.search.SuggestSession
 import com.yandex.runtime.Error
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,12 +57,14 @@ sealed class OrderState {
     data object Idle : OrderState()
     data object Loading : OrderState()
     data class Created(val ride: RideResponse) : OrderState()
+    data class Accepted(val rideId: Int) : OrderState()
     data class Error(val message: String) : OrderState()
 }
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
     private val rideRepository: RideRepository,
+    private val rideStatusSocket: RideStatusSocket,
 ) : ViewModel() {
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -80,6 +84,10 @@ class MapViewModel @Inject constructor(
     val orderState = MutableStateFlow<OrderState>(OrderState.Idle)
     val tariffs = MutableStateFlow<List<TariffOption>>(emptyList())
     val routeEta = MutableStateFlow(0)
+
+    private var connectedRideId: Int? = null
+    private var reconnectAttempt: Int = 0
+    private var reconnectJob: Job? = null
 
     fun updateUserLocation(point: Point) {
         currentUserLocation = point
@@ -292,14 +300,76 @@ class MapViewModel @Inject constructor(
             orderState.value = OrderState.Loading
             val result = rideRepository.createRide(start = start, finish = finish)
             orderState.value = result.fold(
-                onSuccess = { ride -> OrderState.Created(ride) },
+                onSuccess = { ride ->
+                    connectToRideSocket(ride.id)
+                    OrderState.Created(ride)
+                },
                 onFailure = { e -> OrderState.Error(e.message ?: "Не удалось создать заказ") }
             )
         }
     }
 
+    fun connectToRideSocket(rideId: Int) {
+        if (connectedRideId == rideId) return
+
+        reconnectJob?.cancel()
+        connectedRideId = rideId
+        reconnectAttempt = 0
+
+        rideStatusSocket.connect(rideId) { event ->
+            when (event) {
+                is RideStatusSocket.Event.Message -> {
+                    // Django Channels присылает: {"ride_id": Int, "status": String}
+                    val status = event.message.status
+                    if (status.equals("ACCEPTED", ignoreCase = true)) {
+                        orderState.value = OrderState.Accepted(event.message.rideId)
+                        // можно закрыть сокет, но оставим подключение для будущих статусов
+                    }
+                }
+                is RideStatusSocket.Event.Failure,
+                is RideStatusSocket.Event.Closed -> {
+                    scheduleReconnect()
+                }
+                else -> Unit
+            }
+        }
+    }
+
+    private fun scheduleReconnect() {
+        val rideId = connectedRideId ?: return
+        if (orderState.value is OrderState.Accepted || orderState.value is OrderState.Idle) return
+
+        reconnectJob?.cancel()
+        reconnectJob = viewModelScope.launch {
+            // экспоненциальная задержка: 1s, 2s, 4s, 8s ... до 30s
+            val delayMs = (1000L shl reconnectAttempt.coerceAtMost(5)).coerceAtMost(30_000L)
+            reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(10)
+            kotlinx.coroutines.delay(delayMs)
+            // если пока не отменили и всё ещё актуально
+            if (connectedRideId == rideId && orderState.value is OrderState.Created) {
+                rideStatusSocket.connect(rideId) { event ->
+                    when (event) {
+                        is RideStatusSocket.Event.Message -> {
+                            val status = event.message.status
+                            if (status.equals("ACCEPTED", ignoreCase = true)) {
+                                orderState.value = OrderState.Accepted(event.message.rideId)
+                            }
+                        }
+                        is RideStatusSocket.Event.Failure,
+                        is RideStatusSocket.Event.Closed -> scheduleReconnect()
+                        else -> Unit
+                    }
+                }
+            }
+        }
+    }
+
     fun cancelOrder() {
         orderState.value = OrderState.Idle
+        connectedRideId = null
+        reconnectJob?.cancel()
+        reconnectJob = null
+        rideStatusSocket.close()
     }
 
     override fun onCleared() {
@@ -307,6 +377,8 @@ class MapViewModel @Inject constructor(
         drivingSession?.cancel()
         suggestSession.reset()
         searchSession?.cancel()
+        reconnectJob?.cancel()
+        rideStatusSocket.close()
     }
 
     private companion object {

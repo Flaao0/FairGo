@@ -335,7 +335,7 @@ fun MapScreen(
             )
 
             AnimatedContent(
-                targetState = routeGeometry != null && orderState !is OrderState.Created,
+                targetState = routeGeometry != null && orderState !is OrderState.Created && orderState !is OrderState.Accepted,
                 transitionSpec = {
                     (fadeIn(tween(200)) + slideInVertically(tween(260)) { it / 4 })
                         .togetherWith(fadeOut(tween(160)) + slideOutVertically(tween(220)) { it / 6 })
@@ -369,6 +369,75 @@ fun MapScreen(
             if (orderState is OrderState.Created) {
                 SearchingDriverOverlay(
                     onCancel = { viewModel.cancelOrder() },
+                )
+            }
+
+            if (orderState is OrderState.Accepted) {
+                DriverOnWayCard(
+                    rideId = (orderState as OrderState.Accepted).rideId,
+                    onCancel = { /* TODO: отмена поездки */ },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DriverOnWayCard(
+    rideId: Int,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 12.dp)
+                .navigationBarsPadding(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .padding(bottom = 16.dp)
+                    .size(width = 38.dp, height = 4.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFFD8DDE1)),
+            )
+
+            Text(
+                text = "Водитель в пути",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = Color(0xFF3D4754),
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Статус: ACCEPTED • Ride #$rideId",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF7B8794),
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF1F3F5)),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp),
+            ) {
+                Text(
+                    text = "Отменить поездку",
+                    color = Color(0xFF3D4754),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                 )
             }
         }
@@ -488,6 +557,7 @@ private fun OrderCard(
                     OrderState.Loading -> "Создаём заказ…"
                     is OrderState.Created -> "Поиск водителя..."
                     is OrderState.Error -> state.message
+                    is OrderState.Accepted -> {""}
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = Color(0xFF3D4754),
