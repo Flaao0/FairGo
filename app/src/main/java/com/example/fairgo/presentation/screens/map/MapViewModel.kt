@@ -58,6 +58,7 @@ sealed class OrderState {
     data object Loading : OrderState()
     data class Created(val ride: RideResponse) : OrderState()
     data class Accepted(val rideId: Int) : OrderState()
+    data class Finished(val rideId: Int) : OrderState()
     data class Error(val message: String) : OrderState()
 }
 
@@ -84,6 +85,8 @@ class MapViewModel @Inject constructor(
     val orderState = MutableStateFlow<OrderState>(OrderState.Idle)
     val tariffs = MutableStateFlow<List<TariffOption>>(emptyList())
     val routeEta = MutableStateFlow(0)
+    val startAddressText = MutableStateFlow("Мое местоположение")
+    val endAddressText = MutableStateFlow("")
 
     private var connectedRideId: Int? = null
     private var reconnectAttempt: Int = 0
@@ -122,6 +125,9 @@ class MapViewModel @Inject constructor(
         orderState.value = OrderState.Idle
         tariffs.value = emptyList()
         routeEta.value = 0
+        // здесь старт - текущее местоположение
+        startAddressText.value = "Мое местоположение"
+        endAddressText.value = "${item.street}${if (item.city.isNotBlank()) ", ${item.city}" else ""}"
 
         Log.d("MAP_DEBUG", "Запрос маршрута: Start=$start, End=$end")
 
@@ -136,6 +142,7 @@ class MapViewModel @Inject constructor(
         orderState.value = OrderState.Idle
         tariffs.value = emptyList()
         routeEta.value = 0
+        startAddressText.value = "Мое местоположение"
 
         val requestPoints = listOf(
             RequestPoint(startPoint, RequestPointType.WAYPOINT, null, null),
@@ -213,6 +220,8 @@ class MapViewModel @Inject constructor(
             ?: suggestItem.title.text.takeIf { it.isNotBlank() }
             ?: return
 
+        endAddressText.value = queryText
+
         _toAddress.value = queryText
         _addressSuggestions.value = emptyList()
 
@@ -233,6 +242,7 @@ class MapViewModel @Inject constructor(
                         orderState.value = OrderState.Idle
                         tariffs.value = emptyList()
                         routeEta.value = 0
+                        startAddressText.value = "Мое местоположение"
 
                         val newAddress = AddressItem(
                             street = suggestItem.title.text,
@@ -319,11 +329,15 @@ class MapViewModel @Inject constructor(
         rideStatusSocket.connect(rideId) { event ->
             when (event) {
                 is RideStatusSocket.Event.Message -> {
-                    // Django Channels присылает: {"ride_id": Int, "status": String}
                     val status = event.message.status
                     if (status.equals("ACCEPTED", ignoreCase = true)) {
                         orderState.value = OrderState.Accepted(event.message.rideId)
                         // можно закрыть сокет, но оставим подключение для будущих статусов
+                    } else if (status.equals("FINISHED", ignoreCase = true)) {
+                        orderState.value = OrderState.Finished(event.message.rideId)
+                        reconnectJob?.cancel()
+                        reconnectJob = null
+                        rideStatusSocket.close()
                     }
                 }
                 is RideStatusSocket.Event.Failure,
@@ -341,11 +355,9 @@ class MapViewModel @Inject constructor(
 
         reconnectJob?.cancel()
         reconnectJob = viewModelScope.launch {
-            // экспоненциальная задержка: 1s, 2s, 4s, 8s ... до 30s
             val delayMs = (1000L shl reconnectAttempt.coerceAtMost(5)).coerceAtMost(30_000L)
             reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(10)
             kotlinx.coroutines.delay(delayMs)
-            // если пока не отменили и всё ещё актуально
             if (connectedRideId == rideId && orderState.value is OrderState.Created) {
                 rideStatusSocket.connect(rideId) { event ->
                     when (event) {
@@ -353,6 +365,11 @@ class MapViewModel @Inject constructor(
                             val status = event.message.status
                             if (status.equals("ACCEPTED", ignoreCase = true)) {
                                 orderState.value = OrderState.Accepted(event.message.rideId)
+                            } else if (status.equals("FINISHED", ignoreCase = true)) {
+                                orderState.value = OrderState.Finished(event.message.rideId)
+                                reconnectJob?.cancel()
+                                reconnectJob = null
+                                rideStatusSocket.close()
                             }
                         }
                         is RideStatusSocket.Event.Failure,
@@ -370,6 +387,23 @@ class MapViewModel @Inject constructor(
         reconnectJob?.cancel()
         reconnectJob = null
         rideStatusSocket.close()
+    }
+
+    fun resetOrder() {
+        _routeGeometry.value = null
+        tariffs.value = emptyList()
+        routeEta.value = 0
+        _toAddress.value = ""
+        _addressSuggestions.value = emptyList()
+        startAddressText.value = "Мое местоположение"
+        endAddressText.value = ""
+
+        connectedRideId = null
+        reconnectJob?.cancel()
+        reconnectJob = null
+        rideStatusSocket.close()
+
+        orderState.value = OrderState.Idle
     }
 
     override fun onCleared() {

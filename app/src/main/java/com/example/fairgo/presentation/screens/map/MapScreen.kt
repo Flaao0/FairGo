@@ -45,6 +45,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.ChildCare
@@ -60,7 +61,6 @@ import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -107,7 +107,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun MapScreen(
-    viewModel: MapViewModel,
+    viewModel: MapViewModel, modifier: Modifier = Modifier,
     onNavigateToAddressSelection: () -> Unit,
     onNavigateToPayment: () -> Unit,
     onNavigateToPromoCode: () -> Unit,
@@ -122,6 +122,8 @@ fun MapScreen(
     val orderState by viewModel.orderState.collectAsState()
     val tariffs by viewModel.tariffs.collectAsState()
     val routeEta by viewModel.routeEta.collectAsState()
+    val startAddressText by viewModel.startAddressText.collectAsState()
+    val endAddressText by viewModel.endAddressText.collectAsState()
 
     val hasLocationPermission = remember(context) {
         ContextCompat.checkSelfPermission(
@@ -135,7 +137,6 @@ fun MapScreen(
 
     var hasCenteredToUserLocation by remember { mutableStateOf(false) }
 
-    // Спасаем линию от сборщика мусора
     var routePolylineMapObject by remember { mutableStateOf<PolylineMapObject?>(null) }
 
     val mapView = remember {
@@ -161,7 +162,6 @@ fun MapScreen(
         }
     }
 
-    // 1. Создаем ОТДЕЛЬНУЮ коллекцию только для маршрута, чтобы не ломать карту очисткой
     val routeCollection = remember(mapView) {
         mapView.mapWindow.map.mapObjects.addCollection()
     }
@@ -252,9 +252,7 @@ fun MapScreen(
         }
     }
 
-    // --- БРОНЕБОЙНАЯ ОТРИСОВКА МАРШРУТА ---
     LaunchedEffect(routeGeometry) {
-        // Очищаем ТОЛЬКО коллекцию маршрутов, а не всю карту
         routeCollection.clear()
 
         val currentRoute = routeGeometry
@@ -262,10 +260,8 @@ fun MapScreen(
             try {
                 Log.d("MAP_DEBUG", "Начинаем рисовать линию на карте...")
 
-                // Добавляем полилинию в нашу отдельную коллекцию
                 val polyline = routeCollection.addPolyline(currentRoute)
 
-                // 2. Используем железобетонный android.graphics.Color
                 polyline.setStrokeColor(android.graphics.Color.parseColor("#2C68FF"))
                 polyline.setStrokeWidth(6f)
                 polyline.setZIndex(100f)
@@ -273,7 +269,6 @@ fun MapScreen(
                 routePolylineMapObject = polyline
                 Log.d("MAP_DEBUG", "Линия успешно добавлена в routeCollection!")
 
-                // 3. Пытаемся подвинуть камеру
                 val geometry = Geometry.fromPolyline(currentRoute)
                 val cameraPosition = mapView.mapWindow.map.cameraPosition(geometry)
 
@@ -289,7 +284,6 @@ fun MapScreen(
             }
         }
     }
-    // --------------------------------------------
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -386,6 +380,19 @@ fun MapScreen(
                         .padding(bottom = 10.dp),
                 )
             }
+
+            if (orderState is OrderState.Finished) {
+                val price = tariffs.firstOrNull { it.isSelected }?.price ?: 185
+                RideFinishedCard(
+                    startAddress = startAddressText,
+                    endAddress = endAddressText,
+                    priceRub = price,
+                    onDone = { viewModel.resetOrder() },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -410,7 +417,6 @@ private fun DriverAcceptedCard(
                     .padding(top = 34.dp, bottom = 18.dp)
                     .navigationBarsPadding(),
             ) {
-                // Верхний "хэндл" как в дизайне
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterHorizontally)
@@ -525,7 +531,6 @@ private fun DriverAcceptedCard(
             }
         }
 
-        // Выпирающая аватарка
         Surface(
             shape = CircleShape,
             color = Color(0xFFE9EEF2),
@@ -662,7 +667,8 @@ private fun OrderCard(
                     OrderState.Loading -> "Создаём заказ…"
                     is OrderState.Created -> "Поиск водителя..."
                     is OrderState.Error -> state.message
-                    is OrderState.Accepted -> {""}
+                    is OrderState.Accepted -> ""
+                    is OrderState.Finished -> "Поездка закончена"
                 },
                 style = MaterialTheme.typography.titleMedium,
                 color = Color(0xFF3D4754),
@@ -1002,7 +1008,159 @@ private fun SearchingDriverOverlay(
     }
 }
 
-// ... Оставшийся код (DrawerMenuContent, AddressListItem и т.д.) без изменений ...
+@Composable
+private fun RideFinishedCard(
+    startAddress: String,
+    endAddress: String,
+    priceRub: Int,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 22.dp, vertical = 18.dp)
+                .navigationBarsPadding(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFFF0F2F5),
+                modifier = Modifier.size(72.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color(0xFF7DB546),
+                        modifier = Modifier.size(34.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Text(
+                text = "Поездка закончена",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = Color(0xFF3D4754),
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color(0xFFE9EEF2), RoundedCornerShape(16.dp)),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // Маркеры + линия слева
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(end = 12.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF7DB546))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(2.dp)
+                                .height(34.dp)
+                                .background(Color(0xFFE1E6EA))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color(0xFF3D4754))
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = if (startAddress.isBlank()) "Мое местоположение" else startAddress,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFF3D4754),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = endAddress.ifBlank { "—" },
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFF3D4754),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFFF7F7F7))
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AttachMoney,
+                    contentDescription = null,
+                    tint = Color(0xFF7DB546),
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = "Cash",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color(0xFF3D4754),
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "$priceRub ₽",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Color(0xFF3D4754),
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+
+            Button(
+                onClick = onDone,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7DB546)),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp),
+            ) {
+                Text(
+                    text = "Готово",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun DrawerMenuContent(
     onClose: () -> Unit,
@@ -1037,7 +1195,7 @@ fun DrawerMenuContent(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Егор",
+                text = "Владислав",
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
